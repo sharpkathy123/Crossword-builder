@@ -2,35 +2,146 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Crossword Builder – Constructor Edition</title>
+<title>Crossword Builder – Drag & Drop Themes</title>
 <style>
-  body { font-family: system-ui, sans-serif; margin: 0; padding: 1rem;
-         display: flex; gap: 1.5rem; background: #f5f5f5; }
-  #left, #right { background: #fff; padding: 1rem; border-radius: 8px;
-                  box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
-  #left { flex: 0 0 320px; }
-  #right { flex: 1; min-width: 0; }
-  textarea, select { width: 100%; box-sizing: border-box; margin-top: 0.25rem; }
-  textarea { min-height: 120px; resize: vertical; }
-  button { margin-top: 0.5rem; margin-right: 0.5rem; padding: 0.4rem 0.8rem;
-           border-radius: 4px; border: none; cursor: pointer; font-size: 0.9rem; }
-  button.primary { background: #2563eb; color: #fff; }
-  button.secondary { background: #6b7280; color: #fff; }
-  button:disabled { opacity: 0.5; cursor: default; }
-  #status { font-size: 0.8rem; color: #4b5563; margin-top: 0.5rem; }
-  #grid { display: inline-grid; gap: 1px; background: #111; padding: 4px; border-radius: 4px; }
-  .cell { width: 28px; height: 28px; background: #fff; display: flex;
-          align-items: center; justify-content: center; cursor: pointer; position: relative; }
-  .cell.block { background: #111; }
-  .cell input { width: 100%; height: 100%; border: none; text-align: center;
-                font-size: 0.9rem; background: transparent; outline: none; }
-  .number { position: absolute; top: 1px; left: 2px; font-size: 0.55rem; }
-  #clues { margin-top: 1rem; display: flex; gap: 2rem; font-size: 0.9rem; }
-  #clues h3 { margin: 0 0 0.25rem 0; }
-  .clue-item { margin-bottom: 0.25rem; cursor: pointer; padding: 2px 4px; border-radius: 3px; }
-  .clue-item span.answer { color: #6b7280; font-size: 0.8rem; margin-left: 0.25rem; }
-  .clue-item.theme-draggable { border: 1px dashed #9ca3af; }
-  .clue-item.dragging { background: #e5e7eb; }
+  body {
+    font-family: system-ui, sans-serif;
+    margin: 0;
+    padding: 1rem;
+    display: flex;
+    gap: 1.5rem;
+    background: #f5f5f5;
+  }
+
+  #left, #right {
+    background: #fff;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+  }
+
+  #left {
+    flex: 0 0 320px;
+  }
+
+  #right {
+    flex: 1;
+    min-width: 0;
+  }
+
+  textarea {
+    width: 100%;
+    box-sizing: border-box;
+    min-height: 120px;
+    resize: vertical;
+  }
+
+  button {
+    margin-top: 0.5rem;
+    margin-right: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+  }
+
+  button.primary {
+    background: #2563eb;
+    color: #fff;
+  }
+
+  button.secondary {
+    background: #6b7280;
+    color: #fff;
+  }
+
+  #grid {
+    display: inline-grid;
+    gap: 1px;
+    background: #111;
+    padding: 4px;
+    border-radius: 4px;
+  }
+
+  .cell {
+    width: 28px;
+    height: 28px;
+    background: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    position: relative;
+  }
+
+  .cell.block {
+    background: #111;
+  }
+
+  .cell input {
+    width: 100%;
+    height: 100%;
+    border: none;
+    text-align: center;
+    font-size: 0.9rem;
+    background: transparent;
+    outline: none;
+  }
+
+  .cell.theme-locked {
+    background: #e0f2fe;
+  }
+
+  .number {
+    position: absolute;
+    top: 1px;
+    left: 2px;
+    font-size: 0.55rem;
+  }
+
+  #theme-list {
+    margin-top: 0.5rem;
+    font-size: 0.9rem;
+  }
+
+  .theme-item {
+    padding: 3px 6px;
+    margin-bottom: 3px;
+    border-radius: 4px;
+    border: 1px dashed #9ca3af;
+    cursor: grab;
+    background: #f9fafb;
+  }
+
+  .theme-item.dragging {
+    opacity: 0.5;
+  }
+
+  /* Popup below the cell */
+  #direction-popup {
+    position: absolute;
+    background: #ffffff;
+    border: 1px solid #d1d5db;
+    padding: 6px 8px;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.15);
+    z-index: 9999;
+    display: none;
+  }
+
+  #direction-popup button {
+    margin: 4px 4px 0 0;
+    padding: 3px 6px;
+    font-size: 0.8rem;
+  }
+
+  #status {
+    font-size: 0.8rem;
+    color: #4b5563;
+    margin-top: 0.5rem;
+  }
 </style>
 </head>
 <body>
@@ -38,766 +149,254 @@
 <div id="left">
   <h1>Crossword Builder</h1>
   <p style="font-size:0.85rem;color:#4b5563;">
-    One per line: <strong>ANSWER | clue text</strong> (letters only in answer; spaces allowed, they’ll be removed).
+    One per line: <strong>ANSWER | clue text</strong><br>
+    Spaces in answers are removed automatically.
   </p>
   <textarea id="pairs" placeholder="SOLAR POWER | Album by Lorde&#10;MOON LIGHT | Best Picture winner"></textarea>
-  <div id="input-warnings" style="color:#b91c1c; font-size:0.85rem; margin-top:0.25rem;"></div>
+  <button id="build" class="primary">Build grid & themes</button>
 
-  <label style="font-size:0.85rem;margin-top:0.5rem;">Grid size</label>
-  <select id="size">
-    <option value="15" selected>15 × 15</option>
-    <option value="21">21 × 21</option>
-  </select>
+  <div id="status"></div>
 
-  <div style="margin-top:0.5rem;">
-    <button id="build" class="primary">Build crossword</button>
-    <button id="autofill" class="secondary" disabled>Auto‑fill</button>
-  </div>
-
-  <div id="status">Dictionary: loading…</div>
+  <h3 style="margin-top:1rem;">Theme entries</h3>
+  <div id="theme-list"></div>
 </div>
 
 <div id="right">
-  <div style="font-size:0.85rem;color:#4b5563;margin-bottom:0.5rem;">
-    Click a cell to toggle block (NYT symmetry). Type letters. Single‑click clue = select, double‑click = edit.
-  </div>
-
   <div style="margin-bottom:0.5rem; display:flex; gap:1rem; align-items:center; font-size:0.85rem;">
     <button id="theme-mode-btn" class="secondary">
       Theme Placement Mode: OFF
     </button>
-    <div><strong>Selected slot:</strong> <span id="selected-slot-label">none</span></div>
-    <button id="export-ipuz" class="secondary">Export as ipuz JSON</button>
-    <button id="suggest-clues" class="secondary">Suggest clues (AI hook)</button>
-  </div>
-
-  <div id="candidate-panel" style="margin-bottom:0.5rem; font-size:0.85rem; display:none;">
-    <strong>Candidates:</strong>
-    <div id="candidate-list" style="margin-top:0.25rem; max-height:120px; overflow:auto; border:1px solid #e5e7eb; padding:0.25rem; border-radius:4px;"></div>
+    <div><strong>Hint:</strong> Drag a theme onto a cell.</div>
   </div>
 
   <div id="grid"></div>
+</div>
 
-  <div id="clues">
-    <div style="flex:1;">
-      <h3>Across</h3>
-      <div id="across-list"></div>
-    </div>
-    <div style="flex:1;">
-      <h3>Down</h3>
-      <div id="down-list"></div>
-    </div>
-  </div>
+<!-- Popup for Across/Down selection -->
+<div id="direction-popup">
+  <div id="popup-title" style="margin-bottom:4px; font-weight:600;"></div>
+  <button id="popup-across">Across</button>
+  <button id="popup-down">Down</button>
 </div>
 
 <script>
-  const DICT_URL =
-    "https://raw.githubusercontent.com/dwyl/english-words/master/words_alpha.txt";
-  const DICT_CACHE_KEY = "crossword_dict_v1";
+(function() {
+  const size = 15;
+  const gridEl = document.getElementById('grid');
+  const pairsEl = document.getElementById('pairs');
+  const buildBtn = document.getElementById('build');
+  const themeListEl = document.getElementById('theme-list');
+  const statusEl = document.getElementById('status');
+  const themeModeBtn = document.getElementById('theme-mode-btn');
 
-  let gridSize = 15;
+  const popupEl = document.getElementById('direction-popup');
+  const popupTitleEl = document.getElementById('popup-title');
+  const popupAcrossBtn = document.getElementById('popup-across');
+  const popupDownBtn = document.getElementById('popup-down');
+
+  let themeMode = false;
   let grid = [];
-  let entries = [];
-  let DICTIONARY = [];
-  let DICT_BY_LEN = {};
-  let selectedEntry = null;
-  let themePlacementMode = false;
-  let themeEntryToPlace = null;
-  let draggedThemeId = null;
-
-  const statusEl = document.getElementById("status");
-  const gridEl = document.getElementById("grid");
-  const acrossListEl = document.getElementById("across-list");
-  const downListEl = document.getElementById("down-list");
-  const buildBtn = document.getElementById("build");
-  const autofillBtn = document.getElementById("autofill");
-  const selectedSlotLabel = document.getElementById("selected-slot-label");
-  const candidatePanel = document.getElementById("candidate-panel");
-  const candidateListEl = document.getElementById("candidate-list");
-  const exportIpuzBtn = document.getElementById("export-ipuz");
-  const suggestCluesBtn = document.getElementById("suggest-clues");
-  const themeModeBtn = document.getElementById("theme-mode-btn");
-
-  async function loadDictionary() {
-    const cached = localStorage.getItem(DICT_CACHE_KEY);
-    if (cached) {
-      try {
-        const words = JSON.parse(cached);
-        if (Array.isArray(words) && words.length > 0) {
-          DICTIONARY = words;
-          indexDictionary();
-          statusEl.textContent = `Dictionary: loaded from cache (${DICTIONARY.length} words)`;
-          return;
-        }
-      } catch (_) {}
-    }
-
-    statusEl.textContent = "Dictionary: downloading…";
-    try {
-      const res = await fetch(DICT_URL);
-      if (!res.ok) throw new Error("HTTP " + res.status);
-      const text = await res.text();
-      DICTIONARY = text.split(/\r?\n/).map(w => w.trim().toUpperCase()).filter(Boolean);
-      indexDictionary();
-      localStorage.setItem(DICT_CACHE_KEY, JSON.stringify(DICTIONARY));
-      statusEl.textContent = `Dictionary: loaded (${DICTIONARY.length} words)`;
-    } catch (err) {
-      console.error(err);
-      statusEl.textContent = "Dictionary: failed to load.";
-    }
-  }
-
-  function indexDictionary() {
-    DICT_BY_LEN = {};
-    for (const w of DICTIONARY) {
-      const len = w.length;
-      if (!DICT_BY_LEN[len]) DICT_BY_LEN[len] = [];
-      DICT_BY_LEN[len].push(w);
-    }
-  }
-
-  document.getElementById("size").addEventListener("change", e => {
-    gridSize = parseInt(e.target.value, 10);
-  });
-
-  buildBtn.addEventListener("click", () => {
-    const pairs = parsePairs(document.getElementById("pairs").value);
-    initGrid();
-    // Do NOT auto-place themes; let user place them via theme mode / drag-drop
-    // But we still create entries list from grid (empty) so UI is consistent
-    entries = pairs.map((p, idx) => ({
-      id: "T" + (idx + 1),
-      row: 0,
-      col: 0,
-      len: p.answer.length,
-      dir: "across",
-      clue: p.clue,
-      answer: p.answer,
-      locked: false,
-      isTheme: true
-    }));
-    numberAndRender();
-    autofillBtn.disabled = false;
-  });
-
-  autofillBtn.addEventListener("click", () => {
-    autoFill();
-  });
-
-  exportIpuzBtn.addEventListener("click", () => {
-    const data = buildIpuzLike();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "crossword.ipuz.json";
-    a.click();
-    URL.revokeObjectURL(url);
-  });
-
-  suggestCluesBtn.addEventListener("click", () => {
-    const needing = entries.filter(e => !e.clue || e.clue === "(edit clue)");
-    const payload = needing.map(e => ({ id: e.id, answer: e.answer }));
-    console.log("AI clue payload:", payload);
-    alert("AI clue hook called. Wire this to your backend when you’re ready.");
-  });
-
-  themeModeBtn.addEventListener("click", () => {
-    themePlacementMode = !themePlacementMode;
-    themeModeBtn.textContent = themePlacementMode
-      ? "Theme Placement Mode: ON (drag or click to place)"
-      : "Theme Placement Mode: OFF";
-    if (themePlacementMode) {
-      alert("Theme Placement Mode is ON.\n\nDrag a theme clue onto the grid, or select it and click a cell to place it.");
-    } else {
-      themeEntryToPlace = null;
-      draggedThemeId = null;
-    }
-  });
-
-  function parsePairs(text) {
-    const warnings = [];
-    const lines = text.split("\n");
-    const results = [];
-
-    lines.forEach((rawLine, index) => {
-      let line = rawLine.trim();
-      if (!line) return;
-
-      let answer = "";
-      let clue = "";
-
-      if (line.includes("|")) {
-        let [ansRaw, clueRaw] = line.split("|");
-        answer = ansRaw.replace(/\s+/g, "").toUpperCase();
-        clue = clueRaw.trim();
-        if (clue.length > 0) {
-          clue = clue.charAt(0).toUpperCase() + clue.slice(1);
-        } else {
-          clue = "(no clue yet)";
-        }
-      } else {
-        answer = line.replace(/\s+/g, "").toUpperCase();
-        clue = "(no clue yet)";
-      }
-
-      if (!/^[A-Z]+$/.test(answer)) {
-        warnings.push(`Line ${index + 1}: Invalid characters removed → "${rawLine}"`);
-        answer = answer.replace(/[^A-Z]/g, "");
-      }
-
-      if (answer.length === 0) {
-        warnings.push(`Line ${index + 1}: No valid answer found → "${rawLine}"`);
-        return;
-      }
-
-      results.push({ answer, clue });
-    });
-
-    const warnBox = document.getElementById("input-warnings");
-    if (warnings.length) {
-      warnBox.innerHTML = warnings.map(w => `• ${w}`).join("<br>");
-    } else {
-      warnBox.innerHTML = "";
-    }
-
-    return results;
-  }
+  let themes = [];
+  let currentDrop = null; // { answer, clue, row, col }
 
   function initGrid() {
     grid = [];
-    for (let r = 0; r < gridSize; r++) {
+    gridEl.innerHTML = '';
+    gridEl.style.gridTemplateColumns = `repeat(${size}, 28px)`;
+
+    for (let r = 0; r < size; r++) {
       const row = [];
-      for (let c = 0; c < gridSize; c++) {
-        row.push({ char: "", block: false });
-      }
-      grid.push(row);
-    }
-    selectedEntry = null;
-    selectedSlotLabel.textContent = "none";
-    candidatePanel.style.display = "none";
-  }
-
-  function toggleBlock(r, c) {
-    const symR = gridSize - 1 - r;
-    const symC = gridSize - 1 - c;
-    const newState = !grid[r][c].block;
-
-    grid[r][c].block = newState;
-    grid[symR][symC].block = newState;
-
-    if (newState) {
-      grid[r][c].char = "";
-      grid[symR][symC].char = "";
-    }
-  }
-
-  function numberAndRender() {
-    recomputeEntriesFromGrid();
-    renderGrid();
-    renderClues();
-    computeHeatmap();
-  }
-
-  function recomputeEntriesFromGrid() {
-    const newEntries = [];
-    let num = 1;
-
-    // Keep theme entries that haven't been placed yet (isTheme && no letters on grid)
-    const themeEntries = entries.filter(e => e.isTheme);
-
-    // Across from grid
-    for (let r = 0; r < gridSize; r++) {
-      let c = 0;
-      while (c < gridSize) {
-        if (!grid[r][c].block && (c === 0 || grid[r][c - 1].block)) {
-          let start = c;
-          let len = 0;
-          while (c < gridSize && !grid[r][c].block) {
-            len++;
-            c++;
-          }
-          if (len > 1) {
-            const existing = entries.find(e => e.dir === "across" && e.row === r && e.col === start && e.len === len && !e.isTheme);
-            newEntries.push({
-              id: "A" + num,
-              row: r,
-              col: start,
-              len,
-              dir: "across",
-              clue: existing ? existing.clue : "(edit clue)",
-              answer: extractWord(r, start, len, "across"),
-              locked: existing ? existing.locked : false,
-              isTheme: false
-            });
-            num++;
-          }
-        } else c++;
-      }
-    }
-
-    // Down from grid
-    for (let c = 0; c < gridSize; c++) {
-      let r = 0;
-      while (r < gridSize) {
-        if (!grid[r][c].block && (r === 0 || grid[r - 1][c].block)) {
-          let start = r;
-          let len = 0;
-          while (r < gridSize && !grid[r][c].block) {
-            len++;
-            r++;
-          }
-          if (len > 1) {
-            const existing = entries.find(e => e.dir === "down" && e.col === c && e.row === start && e.len === len && !e.isTheme);
-            newEntries.push({
-              id: "D" + num,
-              row: start,
-              col: c,
-              len,
-              dir: "down",
-              clue: existing ? existing.clue : "(edit clue)",
-              answer: extractWord(start, c, len, "down"),
-              locked: existing ? existing.locked : false,
-              isTheme: false
-            });
-            num++;
-          }
-        } else r++;
-      }
-    }
-
-    // Keep theme entries (they may or may not be placed yet)
-    entries = [...themeEntries, ...newEntries];
-  }
-
-  function extractWord(row, col, len, dir) {
-    let s = "";
-    for (let i = 0; i < len; i++) {
-      const r = dir === "across" ? row : row + i;
-      const c = dir === "across" ? col + i : col;
-      s += grid[r][c].char || ".";
-    }
-    return s;
-  }
-
-  function renderGrid() {
-    gridEl.innerHTML = "";
-    gridEl.style.gridTemplateColumns = `repeat(${gridSize}, 28px)`;
-
-    for (let r = 0; r < gridSize; r++) {
-      for (let c = 0; c < gridSize; c++) {
-        const cellData = grid[r][c];
-        const cell = document.createElement("div");
-        cell.className = "cell" + (cellData.block ? " block" : "");
+      for (let c = 0; c < size; c++) {
+        const cell = document.createElement('div');
+        cell.className = 'cell';
         cell.dataset.row = r;
         cell.dataset.col = c;
 
-        if (!cellData.block) {
-          const input = document.createElement("input");
-          input.maxLength = 1;
-          input.value = cellData.char;
-          input.addEventListener("input", e => {
-            const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
-            e.target.value = v;
-            grid[r][c].char = v;
-          });
-          cell.appendChild(input);
-        }
+        const input = document.createElement('input');
+        input.maxLength = 1;
+        input.addEventListener('input', () => {
+          input.value = input.value.toUpperCase().replace(/[^A-Z]/g, '');
+        });
 
-        // Drag-and-drop target for theme placement
-        cell.addEventListener("dragover", e => {
-          if (!themePlacementMode) return;
+        cell.appendChild(input);
+
+        cell.addEventListener('click', (e) => {
+          if (!themeMode) {
+            // Toggle block
+            if (cell.classList.contains('block')) {
+              cell.classList.remove('block');
+              input.style.visibility = 'visible';
+            } else {
+              cell.classList.add('block');
+              input.value = '';
+              input.style.visibility = 'hidden';
+              cell.classList.remove('theme-locked');
+            }
+          }
+        });
+
+        // Drag-and-drop targets only in theme mode
+        cell.addEventListener('dragover', (e) => {
+          if (!themeMode) return;
           e.preventDefault();
         });
 
-        cell.addEventListener("drop", e => {
-          if (!themePlacementMode) return;
+        cell.addEventListener('drop', (e) => {
+          if (!themeMode) return;
           e.preventDefault();
-          if (!draggedThemeId) return;
-          const entry = entries.find(en => en.id === draggedThemeId);
-          if (!entry) return;
+          const themeIndex = e.dataTransfer.getData('text/plain');
+          const theme = themes[themeIndex];
+          if (!theme) return;
+
           const row = parseInt(cell.dataset.row, 10);
           const col = parseInt(cell.dataset.col, 10);
-          placeThemeEntryAtCell(entry, row, col);
-          draggedThemeId = null;
-        });
 
-        cell.addEventListener("click", e => {
-          if (e.target.tagName === "INPUT") return;
+          currentDrop = {
+            themeIndex,
+            answer: theme.answer,
+            clue: theme.clue,
+            row,
+            col
+          };
 
-          if (themePlacementMode) {
-            if (!themeEntryToPlace) {
-              alert("Select or drag a theme entry first.");
-              return;
-            }
-            const row = parseInt(cell.dataset.row, 10);
-            const col = parseInt(cell.dataset.col, 10);
-            placeThemeEntryAtCell(themeEntryToPlace, row, col);
-            return;
-          }
-
-          toggleBlock(r, c);
-          numberAndRender();
+          showDirectionPopupBelowCell(cell, theme.answer);
         });
 
         gridEl.appendChild(cell);
+        row.push({ cell, input, block: false });
       }
+      grid.push(row);
     }
   }
 
-  function renderClues() {
-    acrossListEl.innerHTML = "";
-    downListEl.innerHTML = "";
+  function parsePairs() {
+    const lines = pairsEl.value.split('\n').map(l => l.trim()).filter(Boolean);
+    const parsed = [];
+    for (const line of lines) {
+      const parts = line.split('|');
+      if (parts.length < 1) continue;
+      const answerRaw = parts[0].trim();
+      if (!answerRaw) continue;
+      const clue = (parts[1] || '').trim();
+      const answer = answerRaw.replace(/\s+/g, '').toUpperCase();
+      parsed.push({ answer, clue, raw: answerRaw });
+    }
+    return parsed;
+  }
 
-    const across = entries.filter(e => !e.isTheme && e.dir === "across");
-    const down = entries.filter(e => !e.isTheme && e.dir === "down");
-    const themes = entries.filter(e => e.isTheme);
-
-    // Show themes at top of Across list as draggable items
-    themes.forEach(e => {
-      const div = document.createElement("div");
-      div.className = "clue-item theme-draggable";
+  function renderThemes() {
+    themeListEl.innerHTML = '';
+    themes.forEach((t, idx) => {
+      const div = document.createElement('div');
+      div.className = 'theme-item';
       div.draggable = true;
-      div.dataset.entryId = e.id;
-      div.innerHTML = `<span>${e.id} 🔒? ${e.answer}</span><span class="answer"> (theme)</span>`;
-
-      div.addEventListener("dragstart", () => {
-        if (!themePlacementMode) return;
-        draggedThemeId = e.id;
-        themeEntryToPlace = e;
-        div.classList.add("dragging");
+      div.textContent = t.answer + (t.clue ? ' – ' + t.clue : '');
+      div.addEventListener('dragstart', (e) => {
+        div.classList.add('dragging');
+        e.dataTransfer.setData('text/plain', String(idx));
       });
-
-      div.addEventListener("dragend", () => {
-        div.classList.remove("dragging");
+      div.addEventListener('dragend', () => {
+        div.classList.remove('dragging');
       });
-
-      div.addEventListener("click", ev => {
-        if (ev.detail === 2) {
-          editEntry(e);
-        } else {
-          selectEntry(e);
-          themeEntryToPlace = e;
-        }
-      });
-
-      acrossListEl.appendChild(div);
-    });
-
-    across.forEach(e => {
-      const div = document.createElement("div");
-      div.className = "clue-item";
-      div.innerHTML = `<span>${e.id} ${e.locked ? "🔒" : "🔓"} ${e.clue}</span><span class="answer"> (${e.answer})</span>`;
-      div.addEventListener("click", ev => {
-        if (ev.detail === 2) editEntry(e);
-        else selectEntry(e);
-      });
-      acrossListEl.appendChild(div);
-    });
-
-    down.forEach(e => {
-      const div = document.createElement("div");
-      div.className = "clue-item";
-      div.innerHTML = `<span>${e.id} ${e.locked ? "🔒" : "🔓"} ${e.clue}</span><span class="answer"> (${e.answer})</span>`;
-      div.addEventListener("click", ev => {
-        if (ev.detail === 2) editEntry(e);
-        else selectEntry(e);
-      });
-      downListEl.appendChild(div);
+      themeListEl.appendChild(div);
     });
   }
 
-  function editEntry(entry) {
-    const newClue = prompt("Edit clue:", entry.clue) ?? entry.clue;
-    let newAnswer = prompt("Edit answer (letters only):", entry.answer) ?? entry.answer;
-    newAnswer = newAnswer.toUpperCase().replace(/[^A-Z]/g, "");
-    if (!newAnswer) return;
+  function showDirectionPopupBelowCell(cell, answer) {
+    const rect = cell.getBoundingClientRect();
+    const scrollX = window.scrollX || window.pageXOffset;
+    const scrollY = window.scrollY || window.pageYOffset;
 
-    for (let i = 0; i < entry.len; i++) {
-      const r = entry.dir === "across" ? entry.row : entry.row + i;
-      const c = entry.dir === "across" ? entry.col : entry.col + i;
-      if (r >= 0 && r < gridSize && c >= 0 && c < gridSize) {
-        grid[r][c].char = "";
-        grid[r][c].block = false;
+    popupTitleEl.textContent = `Place ${answer}`;
+    popupEl.style.display = 'block';
+
+    // Position BELOW the cell (C2)
+    popupEl.style.left = (rect.left + scrollX) + 'px';
+    popupEl.style.top = (rect.bottom + scrollY + 4) + 'px';
+  }
+
+  function hideDirectionPopup() {
+    popupEl.style.display = 'none';
+    currentDrop = null;
+  }
+
+  function placeTheme(direction) {
+    if (!currentDrop) return;
+    const { themeIndex, answer, row, col } = currentDrop;
+
+    const dr = direction === 'across' ? 0 : 1;
+    const dc = direction === 'across' ? 1 : 0;
+
+    // Check fit
+    for (let i = 0; i < answer.length; i++) {
+      const r = row + dr * i;
+      const c = col + dc * i;
+      if (r < 0 || r >= size || c < 0 || c >= size) {
+        alert('Does not fit in grid.');
+        hideDirectionPopup();
+        return;
       }
-    }
-
-    entry.len = newAnswer.length;
-    entry.clue = newClue;
-    entry.answer = newAnswer;
-    entry.locked = confirm("Lock this entry as a theme answer (protected during autofill)?");
-
-    for (let i = 0; i < newAnswer.length; i++) {
-      const r = entry.dir === "across" ? entry.row : entry.row + i;
-      const c = entry.dir === "across" ? entry.col : entry.col + i;
-      if (r >= gridSize || c >= gridSize) break;
-      grid[r][c].char = newAnswer[i];
-      grid[r][c].block = false;
-    }
-    numberAndRender();
-  }
-
-  function selectEntry(entry) {
-    selectedEntry = entry;
-    selectedSlotLabel.textContent = `${entry.id} (${entry.dir || "theme"}, len ${entry.len})`;
-    highlightEntryCells(entry);
-    if (!entry.isTheme) showCandidatesFor(entry);
-  }
-
-  function highlightEntryCells(entry) {
-    const cells = gridEl.querySelectorAll(".cell");
-    cells.forEach(c => c.style.outline = "none");
-
-    if (entry.row == null || entry.col == null) return;
-
-    for (let i = 0; i < entry.len; i++) {
-      const r = entry.dir === "across" ? entry.row : entry.row + i;
-      const c = entry.dir === "across" ? entry.col : entry.col + i;
-      if (r < 0 || r >= gridSize || c < 0 || c >= gridSize) continue;
-      const idx = r * gridSize + c;
-      const cell = cells[idx];
-      if (cell) cell.style.outline = "2px solid #f97316";
-    }
-  }
-
-  function showCandidatesFor(entry) {
-    if (!Object.keys(DICT_BY_LEN).length) {
-      candidatePanel.style.display = "none";
-      return;
-    }
-    const pattern = extractWord(entry.row, entry.col, entry.len, entry.dir);
-    const list = DICT_BY_LEN[entry.len] || [];
-    const regex = new RegExp("^" + pattern.replace(/\./g, ".") + "$");
-    const candidates = list.filter(w => regex.test(w)).slice(0, 200);
-
-    candidateListEl.innerHTML = "";
-    if (!candidates.length) {
-      candidateListEl.textContent = "(no candidates)";
-      candidatePanel.style.display = "block";
-      return;
-    }
-
-    candidates.forEach(w => {
-      const btn = document.createElement("button");
-      btn.textContent = w;
-      btn.style.margin = "2px";
-      btn.style.padding = "2px 4px";
-      btn.style.fontSize = "0.8rem";
-      btn.addEventListener("click", () => applyCandidateToEntry(entry, w));
-      candidateListEl.appendChild(btn);
-    });
-
-    candidatePanel.style.display = "block";
-  }
-
-  function applyCandidateToEntry(entry, word) {
-    for (let i = 0; i < entry.len; i++) {
-      const r = entry.dir === "across" ? entry.row : entry.row + i;
-      const c = entry.dir === "across" ? entry.col : entry.col + i;
-      grid[r][c].char = word[i];
-      grid[r][c].block = false;
-    }
-    entry.answer = word;
-    numberAndRender();
-    const again = entries.find(e => e.id === entry.id);
-    if (again) selectEntry(again);
-  }
-
-  function placeThemeEntryAtCell(entry, row, col) {
-    const dir = confirm(`Place ${entry.answer} ACROSS?\n\nOK = Across\nCancel = Down`)
-      ? "across"
-      : "down";
-
-    if (dir === "across" && col + entry.len > gridSize) {
-      alert("Does not fit horizontally.");
-      return;
-    }
-    if (dir === "down" && row + entry.len > gridSize) {
-      alert("Does not fit vertically.");
-      return;
-    }
-
-    for (let i = 0; i < entry.len; i++) {
-      const r = dir === "across" ? row : row + i;
-      const c = dir === "across" ? col + i : col;
-      if (grid[r][c].block) {
-        alert("Cannot place over a block.");
+      const cellObj = grid[r][c];
+      if (cellObj.cell.classList.contains('block')) {
+        alert('Overlaps a block.');
+        hideDirectionPopup();
+        return;
+      }
+      const existing = cellObj.input.value.toUpperCase();
+      const ch = answer[i];
+      if (existing && existing !== ch) {
+        alert('Conflicts with existing letter.');
+        hideDirectionPopup();
         return;
       }
     }
 
-    for (let i = 0; i < entry.len; i++) {
-      const r = dir === "across" ? row : row + i;
-      const c = dir === "across" ? col + i : col;
-      grid[r][c].char = entry.answer[i];
-      grid[r][c].block = false;
+    // Place letters
+    for (let i = 0; i < answer.length; i++) {
+      const r = row + dr * i;
+      const c = col + dc * i;
+      const cellObj = grid[r][c];
+      cellObj.input.value = answer[i];
+      cellObj.cell.classList.add('theme-locked');
     }
 
-    entry.row = row;
-    entry.col = col;
-    entry.dir = dir;
-    entry.locked = true;
-    entry.isTheme = true;
+    // Optionally mark theme as used (you can extend this)
+    themes[themeIndex].used = true;
 
-    numberAndRender();
-    alert(`${entry.answer} placed ${dir.toUpperCase()}.`);
+    hideDirectionPopup();
   }
 
-  async function autoFill() {
-    if (!Object.keys(DICT_BY_LEN).length) {
-      alert("Dictionary not loaded; autofill unavailable.");
-      return;
-    }
+  popupAcrossBtn.addEventListener('click', () => placeTheme('across'));
+  popupDownBtn.addEventListener('click', () => placeTheme('down'));
 
-    const slots = entries
-      .filter(e => !e.locked && !e.isTheme && e.dir)
-      .map(e => ({
-        ...e,
-        pattern: extractWord(e.row, e.col, e.len, e.dir),
-        candidates: []
-      }));
-
-    for (const slot of slots) {
-      const regex = new RegExp("^" + slot.pattern.replace(/\./g, ".") + "$");
-      const list = DICT_BY_LEN[slot.len] || [];
-      slot.candidates = list.filter(w => regex.test(w));
-      slot.candidates.sort((a, b) => scoreWord(b) - scoreWord(a));
-    }
-
-    slots.sort((a, b) => a.candidates.length - b.candidates.length);
-
-    const success = backtrackFill(0, slots);
-    if (!success) alert("No valid fill found.");
-    numberAndRender();
-  }
-
-  function scoreWord(w) {
-    const freq = { E:13, A:12, R:11, I:10, O:9, T:8, N:7, S:6, L:5, C:4 };
-    let score = 0;
-    for (const ch of w) score += freq[ch] || 1;
-    if (/[^AEIOU]$/.test(w)) score += 2;
-    return score;
-  }
-
-  function backtrackFill(i, slots) {
-    if (i >= slots.length) return true;
-    const slot = slots[i];
-
-    for (const word of slot.candidates) {
-      if (!placeIfValid(slot, word)) continue;
-      if (backtrackFill(i + 1, slots)) return true;
-      removeWord(slot);
-    }
-    return false;
-  }
-
-  function placeIfValid(slot, word) {
-    for (let k = 0; k < slot.len; k++) {
-      const r = slot.dir === "across" ? slot.row : slot.row + k;
-      const c = slot.dir === "across" ? slot.col : slot.col + k;
-      const cell = grid[r][c];
-      if (cell.block) return false;
-      if (cell.char && cell.char !== word[k]) return false;
-    }
-    for (let k = 0; k < slot.len; k++) {
-      const r = slot.dir === "across" ? slot.row : slot.row + k;
-      const c = slot.dir === "across" ? slot.col : slot.col + k;
-      grid[r][c].char = word[k];
-    }
-    slot.answer = word;
-    return true;
-  }
-
-  function removeWord(slot) {
-    for (let k = 0; k < slot.len; k++) {
-      const r = slot.dir === "across" ? slot.row : slot.row + k;
-      const c = slot.dir === "across" ? slot.col : slot.col + k;
-
-      const crossing = entries.some(e => {
-        if (e.dir === slot.dir) return false;
-        if (e.dir === "across") {
-          return r === e.row && c >= e.col && c < e.col + e.len;
-        } else {
-          return c === e.col && r >= e.row && r < e.row + e.len;
-        }
-      });
-
-      if (!crossing) grid[r][c].char = "";
-    }
-  }
-
-  function computeHeatmap() {
-    if (!Object.keys(DICT_BY_LEN).length) return;
-
-    const heat = Array.from({ length: gridSize }, () =>
-      Array.from({ length: gridSize }, () => 0)
-    );
-
-    entries.forEach(e => {
-      if (!e.dir || e.isTheme) return;
-      const pattern = extractWord(e.row, e.col, e.len, e.dir);
-      const list = DICT_BY_LEN[e.len] || [];
-      const regex = new RegExp("^" + pattern.replace(/\./g, ".") + "$");
-      const count = list.filter(w => regex.test(w)).length || 1;
-      const score = 1 / count;
-      for (let i = 0; i < e.len; i++) {
-        const r = e.dir === "across" ? e.row : e.row + i;
-        const c = e.dir === "across" ? e.col : e.col + i;
-        heat[r][c] += score;
-      }
-    });
-
-    const cells = gridEl.querySelectorAll(".cell");
-    for (let r = 0; r < gridSize; r++) {
-      for (let c = 0; c < gridSize; c++) {
-        const idx = r * gridSize + c;
-        const cell = cells[idx];
-        if (!cell || grid[r][c].block) continue;
-        const h = heat[r][c];
-        if (h === 0) {
-          cell.style.backgroundColor = "#fff";
-        } else {
-          const t = Math.min(1, h * 3);
-          const red = 255;
-          const green = Math.round(255 * (1 - t));
-          const blue = Math.round(255 * (1 - t));
-          cell.style.backgroundColor = `rgb(${red},${green},${blue})`;
-        }
+  document.addEventListener('click', (e) => {
+    if (!popupEl.contains(e.target) && e.target.id !== 'direction-popup') {
+      if (popupEl.style.display === 'block') {
+        hideDirectionPopup();
       }
     }
-  }
+  });
 
-  function buildIpuzLike() {
-    const gridChars = [];
-    for (let r = 0; r < gridSize; r++) {
-      const row = [];
-      for (let c = 0; c < gridSize; c++) {
-        row.push(grid[r][c].block ? "#" : (grid[r][c].char || " "));
-      }
-      gridChars.push(row);
-    }
+  buildBtn.addEventListener('click', () => {
+    themes = parsePairs();
+    renderThemes();
+    initGrid();
+    statusEl.textContent = `Loaded ${themes.length} theme entries. Drag them onto the grid in Theme Placement Mode.`;
+  });
 
-    const across = entries.filter(e => !e.isTheme && e.dir === "across").map(e => ({
-      number: e.id,
-      clue: e.clue,
-      answer: e.answer
-    }));
-    const down = entries.filter(e => !e.isTheme && e.dir === "down").map(e => ({
-      number: e.id,
-      clue: e.clue,
-      answer: e.answer
-    }));
+  themeModeBtn.addEventListener('click', () => {
+    themeMode = !themeMode;
+    themeModeBtn.textContent = `Theme Placement Mode: ${themeMode ? 'ON' : 'OFF'}`;
+    themeModeBtn.className = themeMode ? 'secondary' : 'secondary';
+    statusEl.textContent = themeMode
+      ? 'Theme Placement Mode ON: drag themes onto cells to place them.'
+      : 'Theme Placement Mode OFF: click cells to toggle blocks, type letters.';
+  });
 
-    return {
-      version: "http://ipuz.org/v2",
-      kind: ["http://ipuz.org/crossword#1"],
-      dimensions: { width: gridSize, height: gridSize },
-      puzzle: gridChars,
-      clues: { Across: across, Down: down }
-    };
-  }
-
-  loadDictionary();
+  // Initialize empty grid on load
+  initGrid();
+})();
 </script>
+
 </body>
 </html>
