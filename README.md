@@ -1,2 +1,2 @@
 # Crossword-builder
-Crossword puzzle building created with Microsoft Copilot AI
+Crossword puzzle builder created with Microsoft Copilot AI
