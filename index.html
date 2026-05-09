@@ -39,6 +39,8 @@
     One per line: <strong>ANSWER | clue text</strong> (letters only in answer).
   </p>
   <textarea id="pairs" placeholder="CAT | Small pet&#10;TREE | Has leaves"></textarea>
+  
+  <div id="input-warnings" style="color:#b91c1c; font-size:0.85rem; margin-top:0.25rem;"></div>
 
   <label style="font-size:0.85rem;margin-top:0.5rem;">Grid size</label>
   <select id="size">
@@ -181,13 +183,60 @@
   });
 
   function parsePairs(text) {
-    if (!text.trim()) return [];
-    return text.split("\n").map(line => {
-      const [ansRaw, clueRaw] = line.split("|");
-      const answer = (ansRaw || "").trim().toUpperCase().replace(/[^A-Z]/g, "");
-      const clue = (clueRaw || "").trim() || "(no clue yet)";
-      return { answer, clue };
-    }).filter(p => p.answer.length > 0);
+    const warnings = [];
+    const lines = text.split("\n");
+    const results = [];
+  
+    lines.forEach((rawLine, index) => {
+      let line = rawLine.trim();
+      if (!line) return; // skip empty lines
+  
+      let answer = "";
+      let clue = "";
+  
+      if (line.includes("|")) {
+        // Split at the first pipe
+        let [ansRaw, clueRaw] = line.split("|");
+  
+        // Remove ALL spaces from answer
+        answer = ansRaw.replace(/\s+/g, "").toUpperCase();
+  
+        // Clean clue: trim + auto-capitalize first letter
+        clue = clueRaw.trim();
+        if (clue.length > 0) {
+          clue = clue.charAt(0).toUpperCase() + clue.slice(1);
+        } else {
+          clue = "(no clue yet)";
+        }
+      } else {
+        // No pipe → whole line is the answer
+        answer = line.replace(/\s+/g, "").toUpperCase();
+        clue = "(no clue yet)";
+      }
+  
+      // Validate answer
+      if (!/^[A-Z]+$/.test(answer)) {
+        warnings.push(`Line ${index + 1}: Invalid characters removed → "${rawLine}"`);
+        answer = answer.replace(/[^A-Z]/g, "");
+      }
+  
+      if (answer.length === 0) {
+        warnings.push(`Line ${index + 1}: No valid answer found → "${rawLine}"`);
+        return;
+      }
+  
+      results.push({ answer, clue });
+    });
+  
+    // Display warnings
+    const warnBox = document.getElementById("input-warnings");
+    if (warnings.length) {
+      warnBox.innerHTML = warnings.map(w => `• ${w}`).join("<br>");
+    } else {
+      warnBox.innerHTML = "";
+    }
+  
+    return results;
   }
 
   function initGrid() {
