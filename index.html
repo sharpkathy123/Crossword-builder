@@ -27,8 +27,10 @@
   .number { position: absolute; top: 1px; left: 2px; font-size: 0.55rem; }
   #clues { margin-top: 1rem; display: flex; gap: 2rem; font-size: 0.9rem; }
   #clues h3 { margin: 0 0 0.25rem 0; }
-  .clue-item { margin-bottom: 0.25rem; cursor: pointer; }
+  .clue-item { margin-bottom: 0.25rem; cursor: pointer; padding: 2px 4px; border-radius: 3px; }
   .clue-item span.answer { color: #6b7280; font-size: 0.8rem; margin-left: 0.25rem; }
+  .clue-item.theme-draggable { border: 1px dashed #9ca3af; }
+  .clue-item.dragging { background: #e5e7eb; }
 </style>
 </head>
 <body>
@@ -36,10 +38,9 @@
 <div id="left">
   <h1>Crossword Builder</h1>
   <p style="font-size:0.85rem;color:#4b5563;">
-    One per line: <strong>ANSWER | clue text</strong> (letters only in answer).
+    One per line: <strong>ANSWER | clue text</strong> (letters only in answer; spaces allowed, they’ll be removed).
   </p>
-  <textarea id="pairs" placeholder="CAT | Small pet&#10;TREE | Has leaves"></textarea>
-  
+  <textarea id="pairs" placeholder="SOLAR POWER | Album by Lorde&#10;MOON LIGHT | Best Picture winner"></textarea>
   <div id="input-warnings" style="color:#b91c1c; font-size:0.85rem; margin-top:0.25rem;"></div>
 
   <label style="font-size:0.85rem;margin-top:0.5rem;">Grid size</label>
@@ -62,6 +63,9 @@
   </div>
 
   <div style="margin-bottom:0.5rem; display:flex; gap:1rem; align-items:center; font-size:0.85rem;">
+    <button id="theme-mode-btn" class="secondary">
+      Theme Placement Mode: OFF
+    </button>
     <div><strong>Selected slot:</strong> <span id="selected-slot-label">none</span></div>
     <button id="export-ipuz" class="secondary">Export as ipuz JSON</button>
     <button id="suggest-clues" class="secondary">Suggest clues (AI hook)</button>
@@ -97,6 +101,9 @@
   let DICTIONARY = [];
   let DICT_BY_LEN = {};
   let selectedEntry = null;
+  let themePlacementMode = false;
+  let themeEntryToPlace = null;
+  let draggedThemeId = null;
 
   const statusEl = document.getElementById("status");
   const gridEl = document.getElementById("grid");
@@ -109,6 +116,7 @@
   const candidateListEl = document.getElementById("candidate-list");
   const exportIpuzBtn = document.getElementById("export-ipuz");
   const suggestCluesBtn = document.getElementById("suggest-clues");
+  const themeModeBtn = document.getElementById("theme-mode-btn");
 
   async function loadDictionary() {
     const cached = localStorage.getItem(DICT_CACHE_KEY);
@@ -155,7 +163,19 @@
   buildBtn.addEventListener("click", () => {
     const pairs = parsePairs(document.getElementById("pairs").value);
     initGrid();
-    placeGivenAnswers(pairs);
+    // Do NOT auto-place themes; let user place them via theme mode / drag-drop
+    // But we still create entries list from grid (empty) so UI is consistent
+    entries = pairs.map((p, idx) => ({
+      id: "T" + (idx + 1),
+      row: 0,
+      col: 0,
+      len: p.answer.length,
+      dir: "across",
+      clue: p.clue,
+      answer: p.answer,
+      locked: false,
+      isTheme: true
+    }));
     numberAndRender();
     autofillBtn.disabled = false;
   });
@@ -182,26 +202,34 @@
     alert("AI clue hook called. Wire this to your backend when you’re ready.");
   });
 
+  themeModeBtn.addEventListener("click", () => {
+    themePlacementMode = !themePlacementMode;
+    themeModeBtn.textContent = themePlacementMode
+      ? "Theme Placement Mode: ON (drag or click to place)"
+      : "Theme Placement Mode: OFF";
+    if (themePlacementMode) {
+      alert("Theme Placement Mode is ON.\n\nDrag a theme clue onto the grid, or select it and click a cell to place it.");
+    } else {
+      themeEntryToPlace = null;
+      draggedThemeId = null;
+    }
+  });
+
   function parsePairs(text) {
     const warnings = [];
     const lines = text.split("\n");
     const results = [];
-  
+
     lines.forEach((rawLine, index) => {
       let line = rawLine.trim();
-      if (!line) return; // skip empty lines
-  
+      if (!line) return;
+
       let answer = "";
       let clue = "";
-  
+
       if (line.includes("|")) {
-        // Split at the first pipe
         let [ansRaw, clueRaw] = line.split("|");
-  
-        // Remove ALL spaces from answer
         answer = ansRaw.replace(/\s+/g, "").toUpperCase();
-  
-        // Clean clue: trim + auto-capitalize first letter
         clue = clueRaw.trim();
         if (clue.length > 0) {
           clue = clue.charAt(0).toUpperCase() + clue.slice(1);
@@ -209,33 +237,30 @@
           clue = "(no clue yet)";
         }
       } else {
-        // No pipe → whole line is the answer
         answer = line.replace(/\s+/g, "").toUpperCase();
         clue = "(no clue yet)";
       }
-  
-      // Validate answer
+
       if (!/^[A-Z]+$/.test(answer)) {
         warnings.push(`Line ${index + 1}: Invalid characters removed → "${rawLine}"`);
         answer = answer.replace(/[^A-Z]/g, "");
       }
-  
+
       if (answer.length === 0) {
         warnings.push(`Line ${index + 1}: No valid answer found → "${rawLine}"`);
         return;
       }
-  
+
       results.push({ answer, clue });
     });
-  
-    // Display warnings
+
     const warnBox = document.getElementById("input-warnings");
     if (warnings.length) {
       warnBox.innerHTML = warnings.map(w => `• ${w}`).join("<br>");
     } else {
       warnBox.innerHTML = "";
     }
-  
+
     return results;
   }
 
@@ -248,7 +273,6 @@
       }
       grid.push(row);
     }
-    entries = [];
     selectedEntry = null;
     selectedSlotLabel.textContent = "none";
     candidatePanel.style.display = "none";
@@ -268,62 +292,6 @@
     }
   }
 
-  function placeGivenAnswers(pairs) {
-    if (pairs.length === 0) return;
-    const mid = Math.floor(gridSize / 2);
-    const first = pairs[0];
-    const startCol = Math.max(0, mid - Math.floor(first.answer.length / 2));
-    for (let i = 0; i < first.answer.length && startCol + i < gridSize; i++) {
-      grid[mid][startCol + i].char = first.answer[i];
-    }
-    entries.push({
-      id: "A1",
-      row: mid,
-      col: startCol,
-      len: first.answer.length,
-      dir: "across",
-      clue: first.clue,
-      answer: first.answer,
-      locked: true
-    });
-
-    for (let idx = 1; idx < pairs.length; idx++) {
-      placeWordLinearly(pairs[idx].answer, pairs[idx].clue);
-    }
-  }
-
-  function placeWordLinearly(answer, clue) {
-    for (let r = 0; r < gridSize; r++) {
-      for (let c = 0; c <= gridSize - answer.length; c++) {
-        let ok = true;
-        for (let i = 0; i < answer.length; i++) {
-          const cell = grid[r][c + i];
-          if (cell.block || (cell.char && cell.char !== answer[i])) {
-            ok = false;
-            break;
-          }
-        }
-        if (ok) {
-          for (let i = 0; i < answer.length; i++) {
-            grid[r][c + i].char = answer[i];
-          }
-          entries.push({
-            id: "",
-            row: r,
-            col: c,
-            len: answer.length,
-            dir: "across",
-            clue,
-            answer,
-            locked: true
-          });
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
   function numberAndRender() {
     recomputeEntriesFromGrid();
     renderGrid();
@@ -335,6 +303,10 @@
     const newEntries = [];
     let num = 1;
 
+    // Keep theme entries that haven't been placed yet (isTheme && no letters on grid)
+    const themeEntries = entries.filter(e => e.isTheme);
+
+    // Across from grid
     for (let r = 0; r < gridSize; r++) {
       let c = 0;
       while (c < gridSize) {
@@ -346,7 +318,7 @@
             c++;
           }
           if (len > 1) {
-            const existing = entries.find(e => e.dir === "across" && e.row === r && e.col === start && e.len === len);
+            const existing = entries.find(e => e.dir === "across" && e.row === r && e.col === start && e.len === len && !e.isTheme);
             newEntries.push({
               id: "A" + num,
               row: r,
@@ -355,7 +327,8 @@
               dir: "across",
               clue: existing ? existing.clue : "(edit clue)",
               answer: extractWord(r, start, len, "across"),
-              locked: existing ? existing.locked : false
+              locked: existing ? existing.locked : false,
+              isTheme: false
             });
             num++;
           }
@@ -363,6 +336,7 @@
       }
     }
 
+    // Down from grid
     for (let c = 0; c < gridSize; c++) {
       let r = 0;
       while (r < gridSize) {
@@ -374,7 +348,7 @@
             r++;
           }
           if (len > 1) {
-            const existing = entries.find(e => e.dir === "down" && e.col === c && e.row === start && e.len === len);
+            const existing = entries.find(e => e.dir === "down" && e.col === c && e.row === start && e.len === len && !e.isTheme);
             newEntries.push({
               id: "D" + num,
               row: start,
@@ -383,7 +357,8 @@
               dir: "down",
               clue: existing ? existing.clue : "(edit clue)",
               answer: extractWord(start, c, len, "down"),
-              locked: existing ? existing.locked : false
+              locked: existing ? existing.locked : false,
+              isTheme: false
             });
             num++;
           }
@@ -391,7 +366,8 @@
       }
     }
 
-    entries = newEntries;
+    // Keep theme entries (they may or may not be placed yet)
+    entries = [...themeEntries, ...newEntries];
   }
 
   function extractWord(row, col, len, dir) {
@@ -428,8 +404,38 @@
           cell.appendChild(input);
         }
 
+        // Drag-and-drop target for theme placement
+        cell.addEventListener("dragover", e => {
+          if (!themePlacementMode) return;
+          e.preventDefault();
+        });
+
+        cell.addEventListener("drop", e => {
+          if (!themePlacementMode) return;
+          e.preventDefault();
+          if (!draggedThemeId) return;
+          const entry = entries.find(en => en.id === draggedThemeId);
+          if (!entry) return;
+          const row = parseInt(cell.dataset.row, 10);
+          const col = parseInt(cell.dataset.col, 10);
+          placeThemeEntryAtCell(entry, row, col);
+          draggedThemeId = null;
+        });
+
         cell.addEventListener("click", e => {
           if (e.target.tagName === "INPUT") return;
+
+          if (themePlacementMode) {
+            if (!themeEntryToPlace) {
+              alert("Select or drag a theme entry first.");
+              return;
+            }
+            const row = parseInt(cell.dataset.row, 10);
+            const col = parseInt(cell.dataset.col, 10);
+            placeThemeEntryAtCell(themeEntryToPlace, row, col);
+            return;
+          }
+
           toggleBlock(r, c);
           numberAndRender();
         });
@@ -443,8 +449,40 @@
     acrossListEl.innerHTML = "";
     downListEl.innerHTML = "";
 
-    const across = entries.filter(e => e.dir === "across");
-    const down = entries.filter(e => e.dir === "down");
+    const across = entries.filter(e => !e.isTheme && e.dir === "across");
+    const down = entries.filter(e => !e.isTheme && e.dir === "down");
+    const themes = entries.filter(e => e.isTheme);
+
+    // Show themes at top of Across list as draggable items
+    themes.forEach(e => {
+      const div = document.createElement("div");
+      div.className = "clue-item theme-draggable";
+      div.draggable = true;
+      div.dataset.entryId = e.id;
+      div.innerHTML = `<span>${e.id} 🔒? ${e.answer}</span><span class="answer"> (theme)</span>`;
+
+      div.addEventListener("dragstart", () => {
+        if (!themePlacementMode) return;
+        draggedThemeId = e.id;
+        themeEntryToPlace = e;
+        div.classList.add("dragging");
+      });
+
+      div.addEventListener("dragend", () => {
+        div.classList.remove("dragging");
+      });
+
+      div.addEventListener("click", ev => {
+        if (ev.detail === 2) {
+          editEntry(e);
+        } else {
+          selectEntry(e);
+          themeEntryToPlace = e;
+        }
+      });
+
+      acrossListEl.appendChild(div);
+    });
 
     across.forEach(e => {
       const div = document.createElement("div");
@@ -478,8 +516,10 @@
     for (let i = 0; i < entry.len; i++) {
       const r = entry.dir === "across" ? entry.row : entry.row + i;
       const c = entry.dir === "across" ? entry.col : entry.col + i;
-      grid[r][c].char = "";
-      grid[r][c].block = false;
+      if (r >= 0 && r < gridSize && c >= 0 && c < gridSize) {
+        grid[r][c].char = "";
+        grid[r][c].block = false;
+      }
     }
 
     entry.len = newAnswer.length;
@@ -499,18 +539,21 @@
 
   function selectEntry(entry) {
     selectedEntry = entry;
-    selectedSlotLabel.textContent = `${entry.id} (${entry.dir}, len ${entry.len})`;
+    selectedSlotLabel.textContent = `${entry.id} (${entry.dir || "theme"}, len ${entry.len})`;
     highlightEntryCells(entry);
-    showCandidatesFor(entry);
+    if (!entry.isTheme) showCandidatesFor(entry);
   }
 
   function highlightEntryCells(entry) {
     const cells = gridEl.querySelectorAll(".cell");
     cells.forEach(c => c.style.outline = "none");
 
+    if (entry.row == null || entry.col == null) return;
+
     for (let i = 0; i < entry.len; i++) {
       const r = entry.dir === "across" ? entry.row : entry.row + i;
       const c = entry.dir === "across" ? entry.col : entry.col + i;
+      if (r < 0 || r >= gridSize || c < 0 || c >= gridSize) continue;
       const idx = r * gridSize + c;
       const cell = cells[idx];
       if (cell) cell.style.outline = "2px solid #f97316";
@@ -560,6 +603,46 @@
     if (again) selectEntry(again);
   }
 
+  function placeThemeEntryAtCell(entry, row, col) {
+    const dir = confirm(`Place ${entry.answer} ACROSS?\n\nOK = Across\nCancel = Down`)
+      ? "across"
+      : "down";
+
+    if (dir === "across" && col + entry.len > gridSize) {
+      alert("Does not fit horizontally.");
+      return;
+    }
+    if (dir === "down" && row + entry.len > gridSize) {
+      alert("Does not fit vertically.");
+      return;
+    }
+
+    for (let i = 0; i < entry.len; i++) {
+      const r = dir === "across" ? row : row + i;
+      const c = dir === "across" ? col + i : col;
+      if (grid[r][c].block) {
+        alert("Cannot place over a block.");
+        return;
+      }
+    }
+
+    for (let i = 0; i < entry.len; i++) {
+      const r = dir === "across" ? row : row + i;
+      const c = dir === "across" ? col + i : col;
+      grid[r][c].char = entry.answer[i];
+      grid[r][c].block = false;
+    }
+
+    entry.row = row;
+    entry.col = col;
+    entry.dir = dir;
+    entry.locked = true;
+    entry.isTheme = true;
+
+    numberAndRender();
+    alert(`${entry.answer} placed ${dir.toUpperCase()}.`);
+  }
+
   async function autoFill() {
     if (!Object.keys(DICT_BY_LEN).length) {
       alert("Dictionary not loaded; autofill unavailable.");
@@ -567,7 +650,7 @@
     }
 
     const slots = entries
-      .filter(e => !e.locked)
+      .filter(e => !e.locked && !e.isTheme && e.dir)
       .map(e => ({
         ...e,
         pattern: extractWord(e.row, e.col, e.len, e.dir),
@@ -651,6 +734,7 @@
     );
 
     entries.forEach(e => {
+      if (!e.dir || e.isTheme) return;
       const pattern = extractWord(e.row, e.col, e.len, e.dir);
       const list = DICT_BY_LEN[e.len] || [];
       const regex = new RegExp("^" + pattern.replace(/\./g, ".") + "$");
@@ -693,12 +777,12 @@
       gridChars.push(row);
     }
 
-    const across = entries.filter(e => e.dir === "across").map(e => ({
+    const across = entries.filter(e => !e.isTheme && e.dir === "across").map(e => ({
       number: e.id,
       clue: e.clue,
       answer: e.answer
     }));
-    const down = entries.filter(e => e.dir === "down").map(e => ({
+    const down = entries.filter(e => !e.isTheme && e.dir === "down").map(e => ({
       number: e.id,
       clue: e.clue,
       answer: e.answer
