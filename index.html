@@ -2,175 +2,458 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<title>Crossword Builder – Symmetric Edition</title>
+<title>Crossword Builder – Online Dictionary</title>
 <style>
-  body { font-family: sans-serif; margin: 0; padding: 1rem; display: flex; gap: 1.5rem; background: #f5f5f5; }
-  #left, #right { background: #fff; padding: 1rem; border-radius: 8px; box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
+  body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+         margin: 0; padding: 1rem; display: flex; gap: 1.5rem; background: #f5f5f5; }
+  #left, #right { background: #fff; padding: 1rem; border-radius: 8px;
+                  box-shadow: 0 2px 6px rgba(0,0,0,0.08); }
   #left { flex: 0 0 320px; }
-  #right { flex: 1; }
+  #right { flex: 1; min-width: 0; }
+  h1 { margin-top: 0; }
+  textarea, select { width: 100%; box-sizing: border-box; margin-top: 0.25rem; }
+  textarea { min-height: 120px; resize: vertical; }
+  button { margin-top: 0.5rem; margin-right: 0.5rem; padding: 0.4rem 0.8rem;
+           border-radius: 4px; border: none; cursor: pointer; font-size: 0.9rem; }
+  button.primary { background: #2563eb; color: #fff; }
+  button.secondary { background: #6b7280; color: #fff; }
+  button:disabled { opacity: 0.5; cursor: default; }
+  #status { font-size: 0.8rem; color: #4b5563; margin-top: 0.5rem; }
   #grid { display: inline-grid; gap: 1px; background: #111; padding: 4px; border-radius: 4px; }
-  .cell { width: 28px; height: 28px; background: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+  .cell { width: 28px; height: 28px; background: #fff; display: flex;
+          align-items: center; justify-content: center; cursor: pointer; position: relative; }
   .cell.block { background: #111; }
-  .cell input { width: 100%; height: 100%; border: none; text-align: center; font-size: 0.9rem; background: transparent; }
+  .cell input { width: 100%; height: 100%; border: none; text-align: center;
+                font-size: 0.9rem; background: transparent; outline: none; }
   .number { position: absolute; top: 1px; left: 2px; font-size: 0.55rem; }
+  #clues { margin-top: 1rem; display: flex; gap: 2rem; font-size: 0.9rem; }
+  #clues h3 { margin: 0 0 0.25rem 0; }
+  .clue-item { margin-bottom: 0.25rem; cursor: pointer; }
+  .clue-item span.answer { color: #6b7280; font-size: 0.8rem; margin-left: 0.25rem; }
 </style>
 </head>
 <body>
 
 <div id="left">
   <h1>Crossword Builder</h1>
-  <textarea id="pairs" placeholder="CAT | Small pet"></textarea>
+  <p style="font-size:0.85rem;color:#4b5563;">
+    Enter clue/answer pairs (one per line): <strong>ANSWER | clue text</strong>.
+    Answers should be letters only.
+  </p>
+  <textarea id="pairs" placeholder="CAT | Small pet&#10;TREE | Has leaves"></textarea>
+
+  <label style="font-size:0.85rem;margin-top:0.5rem;">Grid size</label>
   <select id="size">
     <option value="15" selected>15 × 15</option>
     <option value="21">21 × 21</option>
   </select>
-  <button id="build">Build</button>
-  <button id="autofill" disabled>Auto‑fill</button>
+
+  <div style="margin-top:0.5rem;">
+    <button id="build" class="primary">Build crossword</button>
+    <button id="autofill" class="secondary" disabled>Auto‑fill remaining</button>
+  </div>
+
+  <div id="status">Dictionary: loading…</div>
 </div>
 
 <div id="right">
+  <div style="font-size:0.85rem;color:#4b5563;margin-bottom:0.5rem;">
+    Click a cell to toggle block (NYT‑style symmetry). Type letters in open cells. Click clues to edit.
+  </div>
   <div id="grid"></div>
   <div id="clues">
-    <h3>Across</h3><div id="across-list"></div>
-    <h3>Down</h3><div id="down-list"></div>
+    <div style="flex:1;">
+      <h3>Across</h3>
+      <div id="across-list"></div>
+    </div>
+    <div style="flex:1;">
+      <h3>Down</h3>
+      <div id="down-list"></div>
+    </div>
   </div>
 </div>
 
 <script>
-let gridSize = 15;
-let grid = [];
-let entries = [];
-let DICTIONARY = [];
+  // === CONFIG: online dictionary URL ===
+  const DICT_URL =
+    "https://raw.githubusercontent.com/dwyl/english-words/master/words_alpha.txt";
+  const DICT_CACHE_KEY = "crossword_dict_v1";
 
-// Load full dictionary
-fetch("dictionary/words.txt")
-  .then(r => r.text())
-  .then(t => {
-    DICTIONARY = t.split(/\r?\n/).map(w => w.trim().toUpperCase()).filter(w => w.length > 1);
-    console.log("Dictionary loaded:", DICTIONARY.length, "words");
-  });
+  let gridSize = 15;
+  let grid = [];      // grid[r][c] = { char: string, block: boolean }
+  let entries = [];   // { id, row, col, len, dir, clue, answer }
+  let DICTIONARY = [];          // flat list
+  let DICT_BY_LEN = {};         // { length: [words...] }
 
-document.getElementById("size").addEventListener("change", e => {
-  gridSize = parseInt(e.target.value, 10);
-});
-
-document.getElementById("build").addEventListener("click", () => {
-  const pairs = parsePairs(document.getElementById("pairs").value);
-  initGrid();
-  placeGivenAnswers(pairs);
-  numberAndRender();
-  document.getElementById("autofill").disabled = false;
-});
-
-document.getElementById("autofill").addEventListener("click", () => {
-  autoFill();
-  numberAndRender();
-});
-
-function parsePairs(text) {
-  return text.split("\n").map(l => l.trim()).filter(Boolean).map(line => {
-    const [a, c] = line.split("|");
-    return { answer: a.trim().toUpperCase(), clue: (c || "").trim() };
-  });
-}
-
-function initGrid() {
-  grid = Array.from({ length: gridSize }, () =>
-    Array.from({ length: gridSize }, () => ({ char: "", block: false }))
-  );
-  entries = [];
-}
-
-function toggleBlock(r, c) {
-  const symR = gridSize - 1 - r;
-  const symC = gridSize - 1 - c;
-
-  const newState = !grid[r][c].block;
-  grid[r][c].block = newState;
-  grid[symR][symC].block = newState;
-
-  if (newState) {
-    grid[r][c].char = "";
-    grid[symR][symC].char = "";
-  }
-}
-
-function placeGivenAnswers(pairs) {
-  if (pairs.length === 0) return;
-  const mid = Math.floor(gridSize / 2);
-  const first = pairs[0];
-
-  const startCol = mid - Math.floor(first.answer.length / 2);
-  for (let i = 0; i < first.answer.length; i++) {
-    grid[mid][startCol + i].char = first.answer[i];
-  }
-
-  entries.push({
-    id: "A1",
-    row: mid,
-    col: startCol,
-    len: first.answer.length,
-    dir: "across",
-    clue: first.clue,
-    answer: first.answer
-  });
-}
-
-function numberAndRender() {
-  renderGrid();
-  renderClues();
-}
-
-function renderGrid() {
+  const statusEl = document.getElementById("status");
   const gridEl = document.getElementById("grid");
-  gridEl.innerHTML = "";
-  gridEl.style.gridTemplateColumns = `repeat(${gridSize}, 28px)`;
+  const acrossListEl = document.getElementById("across-list");
+  const downListEl = document.getElementById("down-list");
+  const buildBtn = document.getElementById("build");
+  const autofillBtn = document.getElementById("autofill");
 
-  for (let r = 0; r < gridSize; r++) {
-    for (let c = 0; c < gridSize; c++) {
-      const cell = document.createElement("div");
-      cell.className = "cell" + (grid[r][c].block ? " block" : "");
-      cell.dataset.r = r;
-      cell.dataset.c = c;
+  // === Load dictionary (with caching) ===
+  async function loadDictionary() {
+    // Try cache first
+    const cached = localStorage.getItem(DICT_CACHE_KEY);
+    if (cached) {
+      try {
+        const words = JSON.parse(cached);
+        if (Array.isArray(words) && words.length > 0) {
+          DICTIONARY = words;
+          indexDictionary();
+          statusEl.textContent = `Dictionary: loaded from cache (${DICTIONARY.length} words)`;
+          return;
+        }
+      } catch (_) {}
+    }
 
-      if (!grid[r][c].block) {
-        const input = document.createElement("input");
-        input.value = grid[r][c].char;
-        input.maxLength = 1;
-        input.addEventListener("input", e => {
-          grid[r][c].char = e.target.value.toUpperCase();
-        });
-        cell.appendChild(input);
+    // Fetch from remote
+    statusEl.textContent = "Dictionary: downloading…";
+    try {
+      const res = await fetch(DICT_URL);
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      const text = await res.text();
+      const words = text.split(/\r?\n/).map(w => w.trim()).filter(Boolean);
+      DICTIONARY = words.map(w => w.toUpperCase());
+      indexDictionary();
+      localStorage.setItem(DICT_CACHE_KEY, JSON.stringify(DICTIONARY));
+      statusEl.textContent = `Dictionary: loaded (${DICTIONARY.length} words)`;
+    } catch (err) {
+      console.error("Dictionary load failed:", err);
+      statusEl.textContent = "Dictionary: failed to load (autofill may be limited).";
+      DICTIONARY = [];
+      DICT_BY_LEN = {};
+    }
+  }
+
+  function indexDictionary() {
+    DICT_BY_LEN = {};
+    for (const w of DICTIONARY) {
+      const len = w.length;
+      if (!DICT_BY_LEN[len]) DICT_BY_LEN[len] = [];
+      DICT_BY_LEN[len].push(w);
+    }
+  }
+
+  // === UI events ===
+  document.getElementById("size").addEventListener("change", e => {
+    gridSize = parseInt(e.target.value, 10);
+  });
+
+  buildBtn.addEventListener("click", () => {
+    const pairs = parsePairs(document.getElementById("pairs").value);
+    initGrid();
+    placeGivenAnswers(pairs);
+    numberAndRender();
+    autofillBtn.disabled = false;
+  });
+
+  autofillBtn.addEventListener("click", () => {
+    autoFill();
+    numberAndRender();
+  });
+
+  // === Parsing and grid setup ===
+  function parsePairs(text) {
+    if (!text.trim()) return [];
+    return text
+      .split("\n")
+      .map(line => line.trim())
+      .filter(Boolean)
+      .map(line => {
+        const [ansRaw, clueRaw] = line.split("|");
+        const answer = (ansRaw || "").trim().toUpperCase().replace(/[^A-Z]/g, "");
+        const clue = (clueRaw || "").trim() || "(no clue yet)";
+        return { answer, clue };
+      })
+      .filter(p => p.answer.length > 0);
+  }
+
+  function initGrid() {
+    grid = [];
+    for (let r = 0; r < gridSize; r++) {
+      const row = [];
+      for (let c = 0; c < gridSize; c++) {
+        row.push({ char: "", block: false });
       }
+      grid.push(row);
+    }
+    entries = [];
+  }
 
-      cell.addEventListener("click", e => {
-        if (e.target.tagName !== "INPUT") {
+  // NYT-style 180° symmetry toggle
+  function toggleBlock(r, c) {
+    const symR = gridSize - 1 - r;
+    const symC = gridSize - 1 - c;
+    const newState = !grid[r][c].block;
+
+    grid[r][c].block = newState;
+    grid[symR][symC].block = newState;
+
+    if (newState) {
+      grid[r][c].char = "";
+      grid[symR][symC].char = "";
+    }
+  }
+
+  // Place first answer in center row; others could be improved later
+  function placeGivenAnswers(pairs) {
+    if (pairs.length === 0) return;
+    const mid = Math.floor(gridSize / 2);
+    const first = pairs[0];
+    const startCol = Math.max(0, mid - Math.floor(first.answer.length / 2));
+    for (let i = 0; i < first.answer.length && startCol + i < gridSize; i++) {
+      grid[mid][startCol + i].char = first.answer[i];
+    }
+    entries.push({
+      id: "A1",
+      row: mid,
+      col: startCol,
+      len: first.answer.length,
+      dir: "across",
+      clue: first.clue,
+      answer: first.answer
+    });
+    // Simple: try to place remaining answers linearly across
+    for (let idx = 1; idx < pairs.length; idx++) {
+      placeWordLinearly(pairs[idx].answer, pairs[idx].clue);
+    }
+  }
+
+  function placeWordLinearly(answer, clue) {
+    for (let r = 0; r < gridSize; r++) {
+      for (let c = 0; c <= gridSize - answer.length; c++) {
+        let ok = true;
+        for (let i = 0; i < answer.length; i++) {
+          const cell = grid[r][c + i];
+          if (cell.block || (cell.char && cell.char !== answer[i])) {
+            ok = false;
+            break;
+          }
+        }
+        if (ok) {
+          for (let i = 0; i < answer.length; i++) {
+            grid[r][c + i].char = answer[i];
+          }
+          entries.push({
+            id: "",
+            row: r,
+            col: c,
+            len: answer.length,
+            dir: "across",
+            clue,
+            answer
+          });
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // === Numbering and rendering ===
+  function numberAndRender() {
+    recomputeEntriesFromGrid();
+    renderGrid();
+    renderClues();
+  }
+
+  function recomputeEntriesFromGrid() {
+    const newEntries = [];
+    let num = 1;
+
+    // Across
+    for (let r = 0; r < gridSize; r++) {
+      let c = 0;
+      while (c < gridSize) {
+        if (!grid[r][c].block && (c === 0 || grid[r][c - 1].block)) {
+          let start = c;
+          let len = 0;
+          while (c < gridSize && !grid[r][c].block) {
+            len++;
+            c++;
+          }
+          if (len > 1) {
+            newEntries.push({
+              id: "A" + num,
+              row: r,
+              col: start,
+              len,
+              dir: "across",
+              clue: "(edit clue)",
+              answer: extractWord(r, start, len, "across")
+            });
+            num++;
+          }
+        } else {
+          c++;
+        }
+      }
+    }
+
+    // Down
+    for (let c = 0; c < gridSize; c++) {
+      let r = 0;
+      while (r < gridSize) {
+        if (!grid[r][c].block && (r === 0 || grid[r - 1][c].block)) {
+          let start = r;
+          let len = 0;
+          while (r < gridSize && !grid[r][c].block) {
+            len++;
+            r++;
+          }
+          if (len > 1) {
+            newEntries.push({
+              id: "D" + num,
+              row: start,
+              col: c,
+              len,
+              dir: "down",
+              clue: "(edit clue)",
+              answer: extractWord(start, c, len, "down")
+            });
+            num++;
+          }
+        } else {
+          r++;
+        }
+      }
+    }
+
+    entries = newEntries;
+  }
+
+  function extractWord(row, col, len, dir) {
+    let s = "";
+    for (let i = 0; i < len; i++) {
+      const r = dir === "across" ? row : row + i;
+      const c = dir === "across" ? col + i : col;
+      s += grid[r][c].char || ".";
+    }
+    return s;
+  }
+
+  function renderGrid() {
+    gridEl.innerHTML = "";
+    gridEl.style.gridTemplateColumns = `repeat(${gridSize}, 28px)`;
+
+    for (let r = 0; r < gridSize; r++) {
+      for (let c = 0; c < gridSize; c++) {
+        const cellData = grid[r][c];
+        const cell = document.createElement("div");
+        cell.className = "cell" + (cellData.block ? " block" : "");
+        cell.dataset.row = r;
+        cell.dataset.col = c;
+
+        if (!cellData.block) {
+          const input = document.createElement("input");
+          input.maxLength = 1;
+          input.value = cellData.char;
+          input.addEventListener("input", e => {
+            const v = e.target.value.toUpperCase().replace(/[^A-Z]/g, "");
+            e.target.value = v;
+            grid[r][c].char = v;
+          });
+          cell.appendChild(input);
+        }
+
+        cell.addEventListener("click", e => {
+          if (e.target.tagName === "INPUT") return;
           toggleBlock(r, c);
           numberAndRender();
-        }
-      });
+        });
 
-      gridEl.appendChild(cell);
+        gridEl.appendChild(cell);
+      }
     }
   }
-}
 
-function renderClues() {
-  document.getElementById("across-list").innerHTML = "(clue extraction not shown here)";
-  document.getElementById("down-list").innerHTML = "(clue extraction not shown here)";
-}
+  function renderClues() {
+    acrossListEl.innerHTML = "";
+    downListEl.innerHTML = "";
 
-function autoFill() {
-  // Very simple pattern matching
-  entries.forEach(e => {
-    const pattern = e.answer.replace(/\./g, ".");
-    const regex = new RegExp("^" + pattern + "$");
-    const candidate = DICTIONARY.find(w => w.length === e.len && regex.test(w));
-    if (candidate) {
-      e.answer = candidate;
+    const across = entries.filter(e => e.dir === "across");
+    const down = entries.filter(e => e.dir === "down");
+
+    across.forEach(e => {
+      const div = document.createElement("div");
+      div.className = "clue-item";
+      div.innerHTML = `<span>${e.id} ${e.clue}</span><span class="answer"> (${e.answer})</span>`;
+      div.addEventListener("click", () => editEntry(e));
+      acrossListEl.appendChild(div);
+    });
+
+    down.forEach(e => {
+      const div = document.createElement("div");
+      div.className = "clue-item";
+      div.innerHTML = `<span>${e.id} ${e.clue}</span><span class="answer"> (${e.answer})</span>`;
+      div.addEventListener("click", () => editEntry(e));
+      downListEl.appendChild(div);
+    });
+  }
+
+  function editEntry(entry) {
+    const newClue = prompt("Edit clue:", entry.clue) ?? entry.clue;
+    let newAnswer = prompt("Edit answer (letters only):", entry.answer) ?? entry.answer;
+    newAnswer = newAnswer.toUpperCase().replace(/[^A-Z]/g, "");
+    if (!newAnswer) return;
+
+    // Clear old cells
+    for (let i = 0; i < entry.len; i++) {
+      const r = entry.dir === "across" ? entry.row : entry.row + i;
+      const c = entry.dir === "across" ? entry.col : entry.col + i;
+      grid[r][c].char = "";
+      grid[r][c].block = false;
     }
-  });
-}
+
+    entry.len = newAnswer.length;
+    entry.clue = newClue;
+    entry.answer = newAnswer;
+
+    for (let i = 0; i < newAnswer.length; i++) {
+      const r = entry.dir === "across" ? entry.row : entry.row + i;
+      const c = entry.dir === "across" ? entry.col : entry.col + i;
+      if (r >= gridSize || c >= gridSize) break;
+      grid[r][c].char = newAnswer[i];
+      grid[r][c].block = false;
+    }
+    numberAndRender();
+  }
+
+  // === Autofill using indexed dictionary ===
+  function autoFill() {
+    if (!Object.keys(DICT_BY_LEN).length) {
+      alert("Dictionary not loaded or empty; autofill will not work.");
+      return;
+    }
+
+    entries.forEach(entry => {
+      const pattern = extractWord(entry.row, entry.col, entry.len, entry.dir);
+      if (!pattern.includes(".")) return;
+
+      const candidates = DICT_BY_LEN[entry.len] || [];
+      if (!candidates.length) return;
+
+      const regex = new RegExp("^" + pattern.replace(/\./g, ".") + "$");
+      const match = candidates.find(w => regex.test(w));
+      if (match) {
+        entry.answer = match;
+        for (let i = 0; i < entry.len; i++) {
+          const r = entry.dir === "across" ? entry.row : entry.row + i;
+          const c = entry.dir === "across" ? entry.col : entry.col + i;
+          grid[r][c].char = match[i];
+          grid[r][c].block = false;
+        }
+        if (entry.clue === "(edit clue)" || !entry.clue) {
+          entry.clue = "Auto: " + match.toLowerCase();
+        }
+      }
+    });
+  }
+
+  // Kick off dictionary load on page load
+  loadDictionary();
 </script>
 </body>
 </html>
